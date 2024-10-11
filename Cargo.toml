@@ -1,0 +1,14 @@
+[package]
+name = "psych-stats-rs"
+version = "0.1.0"
+edition = "2021"
+authors = ["OnlyF0uR"]
+license = "GPL-3.0"
+
+[dependencies]
+csv = "1.3.0"
+
+[features]
+default = ["core"]
+core = []
+anova = ["core"]
