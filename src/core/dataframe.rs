@@ -55,7 +55,7 @@ impl ColumnOps for BinaryColumn {
 
     fn get_value(&self, index: usize) -> Result<Box<dyn Any>, DatasetError> {
         if index >= self.data.len() {
-            return Err(DatasetError::EmptyValueError(index, self.data.len()));
+            return Err(DatasetError::EmptyValue(index, self.data.len()));
         }
         Ok(Box::new(self.data[index].value))
     }
@@ -155,7 +155,7 @@ impl ColumnOps for NumericalColumn {
 
     fn get_value(&self, index: usize) -> Result<Box<dyn Any>, DatasetError> {
         if index >= self.data.len() {
-            return Err(DatasetError::EmptyValueError(index, self.data.len()));
+            return Err(DatasetError::EmptyValue(index, self.data.len()));
         }
         Ok(Box::new(self.data[index].value))
     }
@@ -274,7 +274,7 @@ impl ColumnOps for CategoricalColumn {
 
     fn get_value(&self, index: usize) -> Result<Box<dyn Any>, DatasetError> {
         if index >= self.data.len() {
-            return Err(DatasetError::EmptyValueError(index, self.data.len()));
+            return Err(DatasetError::EmptyValue(index, self.data.len()));
         }
         Ok(Box::new(self.data[index].clone()))
     }

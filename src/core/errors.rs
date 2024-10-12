@@ -4,7 +4,7 @@ use super::dataframe::ColumnType;
 
 #[derive(Debug)]
 pub enum DatasetError {
-    EmptyValueError(usize, usize),
+    EmptyValue(usize, usize),
     ColumnTypeMismatch(String, ColumnType),
     ColumnNotFound(String),
     ValueTypeMismatch(String, String, ColumnType),
@@ -14,7 +14,7 @@ pub enum DatasetError {
 impl fmt::Display for DatasetError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match *self {
-            DatasetError::EmptyValueError(ref index, ref length) => {
+            DatasetError::EmptyValue(ref index, ref length) => {
                 write!(f, "Index out of range: {}/{}", index, length)
             }
             DatasetError::ColumnTypeMismatch(ref column_name, ref expected_type) => {
@@ -45,7 +45,7 @@ impl fmt::Display for DatasetError {
 impl Error for DatasetError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match *self {
-            DatasetError::EmptyValueError(_, _) => None,
+            DatasetError::EmptyValue(_, _) => None,
             DatasetError::ColumnTypeMismatch(_, _) => None,
             DatasetError::ColumnNotFound(_) => None,
             DatasetError::ValueTypeMismatch(_, _, _) => None,

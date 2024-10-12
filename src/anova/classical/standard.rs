@@ -34,8 +34,6 @@ pub fn anova(
     let ms_model = model_ss / df_model as f64;
 
     // Mean sum of squares for error
-    println!("Grand N: {}", grand_n);
-    println!("DV Scores: {:?}", dv_scores.len());
     let df_error = grand_n - dv_scores.len();
     let ms_error = error_ss / df_error as f64;
 
@@ -69,7 +67,10 @@ pub fn anova_expl(df: &DataFrame, dependent_vars: Vec<&str>) -> Result<f64, Data
 
                 error_ss += sse_g;
             } else {
-                eprintln!("[ANOVA] Column {} is not a numeric type", column.name());
+                return Err(DatasetError::ColumnTypeMismatch(
+                    column.name().to_owned(),
+                    column.column_type(),
+                ));
             }
         }
     }

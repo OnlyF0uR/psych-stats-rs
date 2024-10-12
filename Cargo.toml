@@ -11,4 +11,6 @@ csv = "1.3.0"
 [features]
 default = ["core"]
 core = []
+regression = ["core"]
+t_test = ["core"]
 anova = ["core"]
