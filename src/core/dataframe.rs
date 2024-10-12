@@ -1,31 +1,6 @@
 use std::any::Any;
-use std::error::Error;
-use std::fmt;
 
-#[derive(Debug)]
-pub enum DatasetError {
-    EmptyValueError(usize, usize),
-}
-
-// Implement Display for custom error formatting
-impl fmt::Display for DatasetError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            DatasetError::EmptyValueError(ref index, ref length) => {
-                write!(f, "Index out of range: {}/{}", index, length)
-            }
-        }
-    }
-}
-
-// Implement the Error trait for custom error handling
-impl Error for DatasetError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match *self {
-            DatasetError::EmptyValueError(_, _) => None,
-        }
-    }
-}
+use super::errors::DatasetError;
 
 pub trait ColumnOps {
     fn name(&self) -> &str;
@@ -456,7 +431,10 @@ impl DataFrame {
         }
     }
 
-    pub fn grand_descriptives(&self, observation_columns: &[&str]) -> (f64, usize) {
+    pub fn grand_descriptives(
+        &self,
+        observation_columns: &[&str],
+    ) -> Result<(f64, usize), DatasetError> {
         let mut means: Vec<f64> = Vec::new();
 
         let mut grand_n = 0;
@@ -466,13 +444,16 @@ impl DataFrame {
                     means.push(column.mean());
                     grand_n += column.n();
                 } else {
-                    eprintln!("[ANOVA] Column {} is not a numeric type", column.name());
+                    return Err(DatasetError::ColumnTypeMismatch(
+                        column.name().to_string(),
+                        "numeric".to_owned(),
+                    ));
                 }
             }
         }
 
         let grand_mean = means.iter().sum::<f64>() / means.len() as f64;
-        (grand_mean, grand_n)
+        Ok((grand_mean, grand_n))
     }
 }
 
