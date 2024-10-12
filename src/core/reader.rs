@@ -82,13 +82,13 @@ mod tests {
         assert_eq!(df.columns[2].name(), "Column_C");
 
         // assert the first value of every column
-        let item = df.columns[0].get_value(0);
+        let item = df.columns[0].get_value(0).unwrap();
         assert_eq!(item.downcast_ref::<i64>().unwrap(), &1);
 
-        let item = df.columns[1].get_value(0);
+        let item = df.columns[1].get_value(0).unwrap();
         assert_eq!(item.downcast_ref::<f64>().unwrap(), &6.5);
 
-        let item = df.columns[2].get_value(0);
+        let item = df.columns[2].get_value(0).unwrap();
         assert_eq!(item.downcast_ref::<String>().unwrap(), &"a".to_string());
     }
 }

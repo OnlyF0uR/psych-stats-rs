@@ -1,8 +1,35 @@
 use std::any::Any;
+use std::error::Error;
+use std::fmt;
+
+#[derive(Debug)]
+pub enum DatasetError {
+    EmptyValueError(usize, usize),
+}
+
+// Implement Display for custom error formatting
+impl fmt::Display for DatasetError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            DatasetError::EmptyValueError(ref index, ref length) => {
+                write!(f, "Index out of range: {}/{}", index, length)
+            }
+        }
+    }
+}
+
+// Implement the Error trait for custom error handling
+impl Error for DatasetError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match *self {
+            DatasetError::EmptyValueError(_, _) => None,
+        }
+    }
+}
 
 pub trait ColumnOps {
     fn name(&self) -> &str;
-    fn get_value(&self, index: usize) -> Box<dyn Any>;
+    fn get_value(&self, index: usize) -> Result<Box<dyn Any>, DatasetError>;
     fn get_values(&self) -> Box<Vec<&dyn Any>>;
     fn set_values(&mut self, values: Vec<&dyn Any>);
     fn get_values_as_f64(&self) -> Vec<f64>;
@@ -36,8 +63,11 @@ impl ColumnOps for IntegerColumn {
         &self.name
     }
 
-    fn get_value(&self, index: usize) -> Box<dyn Any> {
-        Box::new(self.data[index].value)
+    fn get_value(&self, index: usize) -> Result<Box<dyn Any>, DatasetError> {
+        if index >= self.data.len() {
+            return Err(DatasetError::EmptyValueError(index, self.data.len()));
+        }
+        Ok(Box::new(self.data[index].value))
     }
 
     fn get_values(&self) -> Box<Vec<&dyn Any>> {
@@ -151,8 +181,11 @@ impl ColumnOps for DecimalColumn {
         &self.name
     }
 
-    fn get_value(&self, index: usize) -> Box<dyn Any> {
-        Box::new(self.data[index].value)
+    fn get_value(&self, index: usize) -> Result<Box<dyn Any>, DatasetError> {
+        if index >= self.data.len() {
+            return Err(DatasetError::EmptyValueError(index, self.data.len()));
+        }
+        Ok(Box::new(self.data[index].value))
     }
 
     fn get_values(&self) -> Box<Vec<&dyn Any>> {
@@ -273,8 +306,11 @@ impl ColumnOps for CategoricalColumn {
         &self.name
     }
 
-    fn get_value(&self, index: usize) -> Box<dyn Any> {
-        Box::new(self.data[index].clone()) // Clone to return owned value
+    fn get_value(&self, index: usize) -> Result<Box<dyn Any>, DatasetError> {
+        if index >= self.data.len() {
+            return Err(DatasetError::EmptyValueError(index, self.data.len()));
+        }
+        Ok(Box::new(self.data[index].clone()))
     }
 
     fn get_values(&self) -> Box<Vec<&dyn Any>> {
@@ -418,6 +454,25 @@ impl DataFrame {
         } else if let Some(value) = value.downcast_ref::<String>() {
             column.add_entry(value);
         }
+    }
+
+    pub fn grand_descriptives(&self, observation_columns: &[&str]) -> (f64, usize) {
+        let mut means: Vec<f64> = Vec::new();
+
+        let mut grand_n = 0;
+        for column in self.columns.iter() {
+            if observation_columns.contains(&column.name()) {
+                if column.is_integer() || column.is_decimal() {
+                    means.push(column.mean());
+                    grand_n += column.n();
+                } else {
+                    eprintln!("[ANOVA] Column {} is not a numeric type", column.name());
+                }
+            }
+        }
+
+        let grand_mean = means.iter().sum::<f64>() / means.len() as f64;
+        (grand_mean, grand_n)
     }
 }
 
