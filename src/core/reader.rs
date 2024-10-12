@@ -27,17 +27,20 @@ pub fn import_csv(path: &str) -> Result<DataFrame, Box<dyn Error>> {
         let record = result?;
         if is_first {
             for (index, field) in record.iter().enumerate() {
-                // check if we can parse to float64
-                if field.parse::<f64>().is_ok() && field.contains(".") {
-                    // add decimal column
-
-                    df.add_decimal_column(&headers[index], vec![field.parse::<f64>().unwrap()]);
+                if field.contains(".") {
+                    let parsed = field.parse::<f64>()?;
+                    df.add_numerical_column(&headers[index], vec![parsed]);
+                } else if is_binary(&headers[index], field) {
+                    if field == "0" || field == "false" {
+                        df.add_binary_column(&headers[index], vec![false]);
+                    } else {
+                        df.add_binary_column(&headers[index], vec![true]);
+                    }
                 } else if field.parse::<i64>().is_ok() {
-                    // add integer column
-                    df.add_integer_column(&headers[index], vec![field.parse::<i64>().unwrap()]);
+                    let parsed = field.parse::<f64>()?;
+                    df.add_numerical_column(&headers[index], vec![parsed]);
                 } else {
-                    // add categorical column
-                    df.add_categorical_column(&headers[index], vec![field.to_string()]);
+                    df.add_categorical_column(&headers[index], vec![field.to_owned()]);
                 }
             }
             is_first = false;
@@ -46,29 +49,25 @@ pub fn import_csv(path: &str) -> Result<DataFrame, Box<dyn Error>> {
             // we encountered in the record. If not, we could update the type in the header_map.
 
             for (index, field) in record.iter().enumerate() {
-                // println!("Field: {}", field.parse::<i64>().unwrap());
-
-                let decimal_value = field.parse::<f64>();
-
-                if decimal_value.is_ok() && field.contains(".") {
-                    let decimal_value = decimal_value.unwrap();
-                    // add decimal column
-                    df.add_value_to_column_str(&headers[index], &decimal_value);
-                } else if let Ok(integer_value) = field.parse::<i64>() {
-                    // add integer column
-                    df.add_value_to_column_str(&headers[index], &integer_value);
-                } else {
-                    // add categorical column
-                    df.add_value_to_column_str(&headers[index], &field.to_string());
-                }
+                df.add_value_to_column_str(&headers[index], field)?;
             }
         }
     }
+
     Ok(df)
+}
+
+fn is_binary(header: &str, value: &str) -> bool {
+    if header.to_lowercase().contains("_id") {
+        return false;
+    }
+    value == "0" || value == "1" || value == "true" || value == "false"
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::core::dataframe::ColumnType;
+
     use super::*;
 
     #[test]
@@ -81,9 +80,12 @@ mod tests {
         assert_eq!(df.columns[1].name(), "Column_B");
         assert_eq!(df.columns[2].name(), "Column_C");
 
+        let dtype = df.columns[0].column_type();
+        assert_eq!(dtype, ColumnType::Numerical);
+
         // assert the first value of every column
         let item = df.columns[0].get_value(0).unwrap();
-        assert_eq!(item.downcast_ref::<i64>().unwrap(), &1);
+        assert_eq!(item.downcast_ref::<f64>().unwrap(), &3.0);
 
         let item = df.columns[1].get_value(0).unwrap();
         assert_eq!(item.downcast_ref::<f64>().unwrap(), &6.5);

@@ -1,13 +1,30 @@
-use std::any::Any;
+use std::{any::Any, collections::HashMap};
 
 use super::errors::DatasetError;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ColumnType {
+    Numerical,
+    Categorical,
+    Binary,
+}
+
+impl ColumnType {
+    pub fn as_str(&self) -> &str {
+        match self {
+            ColumnType::Numerical => "Numerical",
+            ColumnType::Categorical => "Categorical",
+            ColumnType::Binary => "Binary",
+        }
+    }
+}
 
 pub trait ColumnOps {
     fn name(&self) -> &str;
     fn get_value(&self, index: usize) -> Result<Box<dyn Any>, DatasetError>;
     fn get_values(&self) -> Box<Vec<&dyn Any>>;
     fn set_values(&mut self, values: Vec<&dyn Any>);
-    fn get_values_as_f64(&self) -> Vec<f64>;
+    fn get_values_as_f64(&self) -> Result<Vec<f64>, DatasetError>;
     fn add_entry(&mut self, value: &dyn Any);
     fn mean(&self) -> f64;
     fn n(&self) -> usize;
@@ -17,23 +34,21 @@ pub trait ColumnOps {
     fn min(&self) -> f64;
     fn max(&self) -> f64;
     fn freq(&self, value: &dyn Any) -> usize;
-    fn is_categorical(&self) -> bool;
-    fn is_integer(&self) -> bool;
-    fn is_decimal(&self) -> bool;
+    fn column_type(&self) -> ColumnType;
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct IntegerEntry {
+pub struct BinaryEntry {
     pub index: usize,
-    pub value: i64,
+    pub value: bool,
 }
 
-pub struct IntegerColumn {
+pub struct BinaryColumn {
     pub name: String,
-    pub data: Vec<IntegerEntry>,
+    pub data: Vec<BinaryEntry>,
 }
 
-impl ColumnOps for IntegerColumn {
+impl ColumnOps for BinaryColumn {
     fn name(&self) -> &str {
         &self.name
     }
@@ -54,24 +69,27 @@ impl ColumnOps for IntegerColumn {
         )
     }
 
-    fn get_values_as_f64(&self) -> Vec<f64> {
-        self.data.iter().map(|entry| entry.value as f64).collect()
+    fn get_values_as_f64(&self) -> Result<Vec<f64>, DatasetError> {
+        return Err(DatasetError::ColumnTypeMismatch(
+            self.name().to_owned(),
+            ColumnType::Numerical,
+        ));
     }
 
     fn set_values(&mut self, values: Vec<&dyn Any>) {
         self.data = values
             .iter()
             .enumerate()
-            .map(|(index, value)| IntegerEntry {
+            .map(|(index, value)| BinaryEntry {
                 index,
-                value: *value.downcast_ref::<i64>().unwrap(),
+                value: *value.downcast_ref::<bool>().unwrap(),
             })
             .collect();
     }
 
     fn add_entry(&mut self, value: &dyn Any) {
-        let value = value.downcast_ref::<i64>().unwrap();
-        let entry = IntegerEntry {
+        let value = value.downcast_ref::<bool>().unwrap();
+        let entry = BinaryEntry {
             index: self.data.len(),
             value: *value,
         };
@@ -79,8 +97,7 @@ impl ColumnOps for IntegerColumn {
     }
 
     fn mean(&self) -> f64 {
-        let sum: i64 = self.data.iter().map(|entry| entry.value).sum();
-        sum as f64 / self.data.len() as f64
+        0.0
     }
 
     fn n(&self) -> usize {
@@ -88,70 +105,50 @@ impl ColumnOps for IntegerColumn {
     }
 
     fn variance(&self) -> f64 {
-        let mean = self.mean();
-        self.data
-            .iter()
-            .map(|entry| (entry.value as f64 - mean).powi(2))
-            .sum::<f64>()
-            / self.data.len() as f64
+        0.0
     }
 
     fn standard_deviation(&self) -> f64 {
-        self.variance().sqrt()
+        0.0
     }
 
     fn median(&self) -> f64 {
-        let mut values: Vec<i64> = self.data.iter().map(|entry| entry.value).collect();
-        values.sort();
-        let mid = values.len() / 2;
-        if values.len() % 2 == 0 {
-            (values[mid - 1] + values[mid]) as f64 / 2.0
-        } else {
-            values[mid] as f64
-        }
+        0.0
     }
 
     fn min(&self) -> f64 {
-        self.data.iter().map(|entry| entry.value).min().unwrap() as f64
+        self.data.iter().map(|entry| entry.value).min().unwrap() as i8 as f64
     }
 
     fn max(&self) -> f64 {
-        self.data.iter().map(|entry| entry.value).max().unwrap() as f64
+        self.data.iter().map(|entry| entry.value).max().unwrap() as i8 as f64
     }
 
     fn freq(&self, value: &dyn Any) -> usize {
-        let value = value.downcast_ref::<i64>().unwrap();
+        let value = value.downcast_ref::<bool>().unwrap();
         self.data
             .iter()
             .filter(|entry| entry.value == *value)
             .count()
     }
 
-    fn is_integer(&self) -> bool {
-        true
-    }
-
-    fn is_decimal(&self) -> bool {
-        false
-    }
-
-    fn is_categorical(&self) -> bool {
-        false
+    fn column_type(&self) -> ColumnType {
+        ColumnType::Binary
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct DecimalEntry {
+pub struct NumericalEntry {
     pub index: usize,
     pub value: f64,
 }
 
-pub struct DecimalColumn {
+pub struct NumericalColumn {
     pub name: String,
-    pub data: Vec<DecimalEntry>,
+    pub data: Vec<NumericalEntry>,
 }
 
-impl ColumnOps for DecimalColumn {
+impl ColumnOps for NumericalColumn {
     fn name(&self) -> &str {
         &self.name
     }
@@ -172,15 +169,15 @@ impl ColumnOps for DecimalColumn {
         )
     }
 
-    fn get_values_as_f64(&self) -> Vec<f64> {
-        self.data.iter().map(|entry| entry.value).collect()
+    fn get_values_as_f64(&self) -> Result<Vec<f64>, DatasetError> {
+        Ok(self.data.iter().map(|entry| entry.value).collect())
     }
 
     fn set_values(&mut self, values: Vec<&dyn Any>) {
         self.data = values
             .iter()
             .enumerate()
-            .map(|(index, value)| DecimalEntry {
+            .map(|(index, value)| NumericalEntry {
                 index,
                 value: *value.downcast_ref::<f64>().unwrap(),
             })
@@ -189,11 +186,12 @@ impl ColumnOps for DecimalColumn {
 
     fn add_entry(&mut self, value: &dyn Any) {
         let value = value.downcast_ref::<f64>().unwrap();
-        let entry = DecimalEntry {
+        let entry = NumericalEntry {
             index: self.data.len(),
             value: *value,
         };
         self.data.push(entry);
+        println!("{:?}", self.data.len());
     }
 
     fn mean(&self) -> f64 {
@@ -202,6 +200,7 @@ impl ColumnOps for DecimalColumn {
     }
 
     fn n(&self) -> usize {
+        println!("{}", self.data.len());
         self.data.len()
     }
 
@@ -253,16 +252,8 @@ impl ColumnOps for DecimalColumn {
             .count()
     }
 
-    fn is_integer(&self) -> bool {
-        false
-    }
-
-    fn is_decimal(&self) -> bool {
-        true
-    }
-
-    fn is_categorical(&self) -> bool {
-        false
+    fn column_type(&self) -> ColumnType {
+        ColumnType::Numerical
     }
 }
 
@@ -292,8 +283,11 @@ impl ColumnOps for CategoricalColumn {
         Box::new(self.data.iter().map(|entry| entry as &dyn Any).collect())
     }
 
-    fn get_values_as_f64(&self) -> Vec<f64> {
-        vec![] // Categorical values cannot be converted to f64
+    fn get_values_as_f64(&self) -> Result<Vec<f64>, DatasetError> {
+        return Err(DatasetError::ColumnTypeMismatch(
+            self.name().to_owned(),
+            ColumnType::Numerical,
+        ));
     }
 
     fn set_values(&mut self, values: Vec<&dyn Any>) {
@@ -334,16 +328,8 @@ impl ColumnOps for CategoricalColumn {
         self.data.iter().filter(|entry| *entry == value).count()
     }
 
-    fn is_integer(&self) -> bool {
-        false
-    }
-
-    fn is_decimal(&self) -> bool {
-        false
-    }
-
-    fn is_categorical(&self) -> bool {
-        true
+    fn column_type(&self) -> ColumnType {
+        ColumnType::Categorical
     }
 }
 
@@ -357,30 +343,60 @@ impl DataFrame {
         DataFrame::default()
     }
 
-    pub fn add_integer_column(&mut self, name: &str, data: Vec<i64>) {
+    pub fn add_binary_column(&mut self, name: &str, data: Vec<bool>) {
         let mut entries = Vec::new();
         for (index, value) in data.iter().enumerate() {
-            entries.push(IntegerEntry {
+            entries.push(BinaryEntry {
                 index,
                 value: *value,
             });
         }
-        let column = IntegerColumn {
+        let column = BinaryColumn {
             name: name.to_string(),
             data: entries,
         };
         self.columns.push(Box::new(column));
     }
 
-    pub fn add_decimal_column(&mut self, name: &str, data: Vec<f64>) {
+    pub fn add_numerical_binary_column(
+        &mut self,
+        name: &str,
+        data: Vec<u8>,
+    ) -> Result<(), DatasetError> {
         let mut entries = Vec::new();
         for (index, value) in data.iter().enumerate() {
-            entries.push(DecimalEntry {
+            let b = match *value {
+                0 => false,
+                1 => true,
+                _ => {
+                    return Err(DatasetError::ValueTypeMismatch(
+                        value.to_string(),
+                        name.to_owned(),
+                        ColumnType::Binary,
+                    ));
+                }
+            };
+
+            entries.push(BinaryEntry { index, value: b });
+        }
+        let column = BinaryColumn {
+            name: name.to_string(),
+            data: entries,
+        };
+        self.columns.push(Box::new(column));
+
+        Ok(())
+    }
+
+    pub fn add_numerical_column(&mut self, name: &str, data: Vec<f64>) {
+        let mut entries = Vec::new();
+        for (index, value) in data.iter().enumerate() {
+            entries.push(NumericalEntry {
                 index,
                 value: *value,
             });
         }
-        let column = DecimalColumn {
+        let column = NumericalColumn {
             name: name.to_string(),
             data: entries,
         };
@@ -395,39 +411,55 @@ impl DataFrame {
         self.columns.push(Box::new(column));
     }
 
-    pub fn add_value_to_column_str(&mut self, column_name: &str, value: &dyn Any) {
+    pub fn add_value_to_column_str(
+        &mut self,
+        column_name: &str,
+        value: &str,
+    ) -> Result<(), DatasetError> {
         let column = self
             .columns
             .iter_mut()
             .find(|column| column.name() == column_name)
-            .unwrap();
+            .ok_or(DatasetError::ColumnNotFound(column_name.to_owned()))?;
 
-        if column.is_integer() {
-            if let Some(value) = value.downcast_ref::<i64>() {
-                column.add_entry(value);
+        match column.column_type() {
+            ColumnType::Binary => {
+                if let Ok(value) = value.parse::<bool>() {
+                    column.add_entry(&value);
+                }
             }
-        } else if column.is_decimal() {
-            if let Some(value) = value.downcast_ref::<f64>() {
-                column.add_entry(value);
+            ColumnType::Numerical => {
+                if let Ok(value) = value.parse::<f64>() {
+                    column.add_entry(&value);
+                }
             }
-        } else if let Some(value) = value.downcast_ref::<String>() {
-            column.add_entry(value);
-        }
+            ColumnType::Categorical => {
+                column.add_entry(&value.to_owned());
+            }
+        };
+
+        Ok(())
     }
 
     pub fn add_value_to_column(&mut self, column_index: usize, value: &dyn Any) {
         let column = &mut self.columns[column_index];
 
-        if column.is_integer() {
-            if let Some(value) = value.downcast_ref::<i64>() {
-                column.add_entry(value);
+        match column.column_type() {
+            ColumnType::Binary => {
+                if let Some(value) = value.downcast_ref::<bool>() {
+                    column.add_entry(value);
+                }
             }
-        } else if column.is_decimal() {
-            if let Some(value) = value.downcast_ref::<f64>() {
-                column.add_entry(value);
+            ColumnType::Numerical => {
+                if let Some(value) = value.downcast_ref::<f64>() {
+                    column.add_entry(value);
+                }
             }
-        } else if let Some(value) = value.downcast_ref::<String>() {
-            column.add_entry(value);
+            ColumnType::Categorical => {
+                if let Some(value) = value.downcast_ref::<String>() {
+                    column.add_entry(value);
+                }
+            }
         }
     }
 
@@ -440,13 +472,14 @@ impl DataFrame {
         let mut grand_n = 0;
         for column in self.columns.iter() {
             if observation_columns.contains(&column.name()) {
-                if column.is_integer() || column.is_decimal() {
+                // log column type
+                if column.column_type() == ColumnType::Numerical {
                     means.push(column.mean());
                     grand_n += column.n();
                 } else {
                     return Err(DatasetError::ColumnTypeMismatch(
                         column.name().to_string(),
-                        "numeric".to_owned(),
+                        ColumnType::Numerical,
                     ));
                 }
             }
@@ -455,6 +488,66 @@ impl DataFrame {
         let grand_mean = means.iter().sum::<f64>() / means.len() as f64;
         Ok((grand_mean, grand_n))
     }
+
+    // TODO: This currently converts i64 to f64. While this is not a problem currently,
+    // we should consider a more robust solution in the future. Or convert all i64 to f64
+    // in the dataset right away.
+    pub fn cat_iv_levels(
+        &self,
+        iv_column_names: &[&str],
+        dv_column_name: &str,
+    ) -> Result<HashMap<String, Vec<f64>>, DatasetError> {
+        let dv_column = match self.columns.iter().find(|&x| x.name() == dv_column_name) {
+            Some(column) => column,
+            None => {
+                return Err(DatasetError::ColumnNotFound(dv_column_name.to_owned()));
+            }
+        };
+
+        if dv_column.column_type() != ColumnType::Numerical {
+            return Err(DatasetError::ColumnTypeMismatch(
+                dv_column_name.to_owned(),
+                ColumnType::Numerical,
+            ));
+        }
+
+        let mut iv_levels: HashMap<String, Vec<f64>> = HashMap::new();
+        for column in self.columns.iter() {
+            let iv_name = column.name();
+            // Check if the column is an independent variable
+            if iv_column_names.contains(&iv_name) {
+                // Check if the column is categorical (conditions e.g.)
+                if column.column_type() == ColumnType::Categorical {
+                    // Loop over the values
+                    let c_values: Vec<String> = column
+                        .get_values()
+                        .iter()
+                        .filter_map(|x| x.downcast_ref::<String>().cloned())
+                        .collect();
+
+                    for (i, ob) in c_values.iter().enumerate() {
+                        let iv_name = format!("{}_{}", iv_name, ob);
+
+                        iv_levels.entry(iv_name.clone()).or_default();
+
+                        // Collect dependent variable for this group
+                        if let Ok(value) = dv_column.get_value(i) {
+                            if let Some(f_value) = value.downcast_ref::<f64>() {
+                                iv_levels.get_mut(&iv_name).unwrap().push(*f_value);
+                            }
+                        }
+                    }
+                } else {
+                    return Err(DatasetError::ColumnTypeMismatch(
+                        iv_name.to_owned(),
+                        ColumnType::Categorical,
+                    ));
+                }
+            }
+        }
+
+        Ok(iv_levels)
+    }
 }
 
 #[cfg(test)]
@@ -462,17 +555,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_add_integer_column() {
+    fn test_add_binary_column() {
         let mut df = DataFrame::new();
-        df.add_integer_column("ages", vec![23, 45, 67, 23, 45]);
-        assert_eq!(df.columns.len(), 1);
-        assert_eq!(df.columns[0].name(), "ages");
+
+        df.add_binary_column("present", vec![true, false, false, true]);
+        assert_eq!(df.columns[0].name(), "present");
+
+        assert!(df
+            .add_numerical_binary_column("was_late", vec![1, 0, 0, 1])
+            .is_ok());
+        assert_eq!(df.columns[1].name(), "was_late");
+
+        assert_eq!(df.columns.len(), 2);
     }
 
     #[test]
-    fn test_add_decimal_column() {
+    fn test_add_numerical_column() {
         let mut df = DataFrame::new();
-        df.add_decimal_column("salaries", vec![3500.0, 4600.0, 4900.0]);
+        df.add_numerical_column("salaries", vec![3500.0, 4600.0, 4900.0]);
         assert_eq!(df.columns.len(), 1);
         assert_eq!(df.columns[0].name(), "salaries");
     }
@@ -486,17 +586,17 @@ mod tests {
     }
 
     #[test]
-    fn test_mean_integer_column() {
+    fn test_freq() {
         let mut df = DataFrame::new();
-        df.add_integer_column("ages", vec![23, 45, 67, 23, 45]);
-        let mean = df.columns[0].mean();
-        assert_eq!(mean, 40.6);
+        df.add_binary_column("ages", vec![true, true, true, false, false]);
+        let freq = df.columns[0].freq(&true);
+        assert_eq!(freq, 3);
     }
 
     #[test]
-    fn test_mean_decimal_column() {
+    fn test_mean() {
         let mut df = DataFrame::new();
-        df.add_decimal_column("salaries", vec![3500.0, 4600.0, 4900.0]);
+        df.add_numerical_column("salaries", vec![3500.0, 4600.0, 4900.0]);
         let mean = df.columns[0].mean();
         assert_eq!(mean, 4333.333333333333);
     }
@@ -514,8 +614,8 @@ mod tests {
         let mut df = DataFrame::new();
 
         // Add test data
-        df.add_integer_column("ages", vec![23, 45, 67, 23, 45]);
-        df.add_decimal_column("salaries", vec![3500.0, 4600.0, 4900.0, 5100.0]);
+        df.add_binary_column("is_senior", vec![false, true, false, false]);
+        df.add_numerical_column("salaries", vec![3500.0, 4600.0, 4900.0, 4900.0]);
         df.add_categorical_column(
             "departments",
             vec![
@@ -528,17 +628,15 @@ mod tests {
         );
 
         // Test frequency for integer column
-        let age_column = &df.columns[0];
-        assert_eq!(age_column.freq(&23i64), 2);
-        assert_eq!(age_column.freq(&45i64), 2);
-        assert_eq!(age_column.freq(&67i64), 1);
-        assert_eq!(age_column.freq(&99i64), 0); // Non-existent value
+        let is_senior_column = &df.columns[0];
+        assert_eq!(is_senior_column.freq(&true), 1);
+        assert_eq!(is_senior_column.freq(&false), 3);
 
-        // Test frequency for decimal column
+        // Test frequency for numerical column
         let salary_column = &df.columns[1];
         assert_eq!(salary_column.freq(&3500.0), 1);
         assert_eq!(salary_column.freq(&4600.0), 1);
-        assert_eq!(salary_column.freq(&4900.0), 1);
+        assert_eq!(salary_column.freq(&4900.0), 2);
         assert_eq!(salary_column.freq(&6000.0), 0); // Non-existent value
 
         // Test frequency for categorical column

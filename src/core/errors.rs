@@ -1,10 +1,13 @@
 use std::{error::Error, fmt};
 
+use super::dataframe::ColumnType;
+
 #[derive(Debug)]
 pub enum DatasetError {
     EmptyValueError(usize, usize),
-    ColumnTypeMismatch(String, String),
+    ColumnTypeMismatch(String, ColumnType),
     ColumnNotFound(String),
+    ValueTypeMismatch(String, String, ColumnType),
 }
 
 // Implement Display for custom error formatting
@@ -15,10 +18,24 @@ impl fmt::Display for DatasetError {
                 write!(f, "Index out of range: {}/{}", index, length)
             }
             DatasetError::ColumnTypeMismatch(ref column_name, ref expected_type) => {
-                write!(f, "Column {} is not of {} type", column_name, expected_type)
+                write!(
+                    f,
+                    "Column {} is not of {} type",
+                    column_name,
+                    expected_type.as_str()
+                )
             }
             DatasetError::ColumnNotFound(ref column_name) => {
                 write!(f, "Column {} not found", column_name)
+            }
+            DatasetError::ValueTypeMismatch(ref value, ref column_name, ref expected_type) => {
+                write!(
+                    f,
+                    "Value {} in column {} is not of {} type",
+                    value,
+                    column_name,
+                    expected_type.as_str()
+                )
             }
         }
     }
@@ -31,6 +48,7 @@ impl Error for DatasetError {
             DatasetError::EmptyValueError(_, _) => None,
             DatasetError::ColumnTypeMismatch(_, _) => None,
             DatasetError::ColumnNotFound(_) => None,
+            DatasetError::ValueTypeMismatch(_, _, _) => None,
         }
     }
 }
