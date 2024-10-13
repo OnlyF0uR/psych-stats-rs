@@ -25,6 +25,7 @@ pub trait ColumnOps {
     fn get_values(&self) -> Box<Vec<&dyn Any>>;
     fn set_values(&mut self, values: Vec<&dyn Any>);
     fn get_values_as_f64(&self) -> Result<Vec<f64>, DatasetError>;
+    fn get_values_as_str(&self) -> Result<Vec<String>, DatasetError>;
     fn add_entry(&mut self, value: &dyn Any);
     fn mean(&self) -> f64;
     fn n(&self) -> usize;
@@ -73,6 +74,13 @@ impl ColumnOps for BinaryColumn {
         return Err(DatasetError::ColumnTypeMismatch(
             self.name().to_owned(),
             ColumnType::Numerical,
+        ));
+    }
+
+    fn get_values_as_str(&self) -> Result<Vec<String>, DatasetError> {
+        return Err(DatasetError::ColumnTypeMismatch(
+            self.name().to_owned(),
+            ColumnType::Categorical,
         ));
     }
 
@@ -173,6 +181,13 @@ impl ColumnOps for NumericalColumn {
         Ok(self.data.iter().map(|entry| entry.value).collect())
     }
 
+    fn get_values_as_str(&self) -> Result<Vec<String>, DatasetError> {
+        return Err(DatasetError::ColumnTypeMismatch(
+            self.name().to_owned(),
+            ColumnType::Categorical,
+        ));
+    }
+
     fn set_values(&mut self, values: Vec<&dyn Any>) {
         self.data = values
             .iter()
@@ -191,7 +206,6 @@ impl ColumnOps for NumericalColumn {
             value: *value,
         };
         self.data.push(entry);
-        println!("{:?}", self.data.len());
     }
 
     fn mean(&self) -> f64 {
@@ -200,7 +214,6 @@ impl ColumnOps for NumericalColumn {
     }
 
     fn n(&self) -> usize {
-        println!("{}", self.data.len());
         self.data.len()
     }
 
@@ -290,6 +303,10 @@ impl ColumnOps for CategoricalColumn {
         ));
     }
 
+    fn get_values_as_str(&self) -> Result<Vec<String>, DatasetError> {
+        Ok(self.data.clone())
+    }
+
     fn set_values(&mut self, values: Vec<&dyn Any>) {
         self.data = values
             .iter()
@@ -336,6 +353,18 @@ impl ColumnOps for CategoricalColumn {
 #[derive(Default)]
 pub struct DataFrame {
     pub columns: Vec<Box<dyn ColumnOps>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ColumnGroupNumericItem {
+    pub name: String,
+    pub value: Vec<f64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ColumnGroupCategoricalItem {
+    pub name: String,
+    pub value: Vec<String>,
 }
 
 impl DataFrame {
@@ -489,20 +518,100 @@ impl DataFrame {
         Ok((grand_mean, grand_n))
     }
 
-    // TODO: This currently converts i64 to f64. While this is not a problem currently,
-    // we should consider a more robust solution in the future. Or convert all i64 to f64
-    // in the dataset right away.
+    pub fn get_column(&self, column_name: &str) -> Result<&Box<dyn ColumnOps>, DatasetError> {
+        let c = self.columns.iter().find(|&x| x.name() == column_name);
+        match c {
+            Some(column) => Ok(column),
+            None => Err(DatasetError::ColumnNotFound(column_name.to_owned())),
+        }
+    }
+
+    pub fn group_numeric_columns(
+        &self,
+        column_names: &[&str],
+    ) -> Result<Vec<ColumnGroupNumericItem>, DatasetError> {
+        let mut groups: Vec<ColumnGroupNumericItem> = Vec::new();
+        for column in self.columns.iter() {
+            if column_names.contains(&column.name()) {
+                if column.column_type() == ColumnType::Numerical {
+                    let values: Vec<f64> = column.get_values_as_f64()?;
+                    let group = ColumnGroupNumericItem {
+                        name: column.name().to_string(),
+                        value: values,
+                    };
+                    groups.push(group);
+                } else {
+                    return Err(DatasetError::ColumnTypeMismatch(
+                        column.name().to_string(),
+                        ColumnType::Numerical,
+                    ));
+                }
+            }
+        }
+
+        Ok(groups)
+    }
+
+    pub fn group_categorical_columns(
+        &self,
+        column_names: &[&str],
+    ) -> Result<Vec<ColumnGroupCategoricalItem>, DatasetError> {
+        let mut groups: Vec<ColumnGroupCategoricalItem> = Vec::new();
+        for column in self.columns.iter() {
+            if column_names.contains(&column.name()) {
+                if column.column_type() == ColumnType::Categorical {
+                    let values: Vec<String> = column
+                        .get_values()
+                        .iter()
+                        .map(|x| x.downcast_ref::<String>().unwrap().to_string())
+                        .collect();
+                    let group = ColumnGroupCategoricalItem {
+                        name: column.name().to_string(),
+                        value: values,
+                    };
+                    groups.push(group);
+                } else {
+                    return Err(DatasetError::ColumnTypeMismatch(
+                        column.name().to_string(),
+                        ColumnType::Categorical,
+                    ));
+                }
+            }
+        }
+
+        Ok(groups)
+    }
+
+    pub fn join_numeric_columns(&self, column_names: &[&str]) -> Result<Vec<f64>, DatasetError> {
+        let mut values: Vec<f64> = Vec::new();
+        for column in self.columns.iter() {
+            if column_names.contains(&column.name()) {
+                if column.column_type() == ColumnType::Numerical {
+                    values.extend(column.get_values_as_f64()?);
+                } else {
+                    return Err(DatasetError::ColumnTypeMismatch(
+                        column.name().to_string(),
+                        ColumnType::Numerical,
+                    ));
+                }
+            }
+        }
+
+        Ok(values)
+    }
+
     pub fn cat_iv_levels(
         &self,
         iv_column_names: &[&str],
         dv_column_name: &str,
     ) -> Result<HashMap<String, Vec<f64>>, DatasetError> {
-        let dv_column = match self.columns.iter().find(|&x| x.name() == dv_column_name) {
-            Some(column) => column,
-            None => {
-                return Err(DatasetError::ColumnNotFound(dv_column_name.to_owned()));
-            }
-        };
+        let dv_column: &Box<dyn ColumnOps> =
+            match self.columns.iter().find(|&x| x.name() == dv_column_name) {
+                Some(column) => column,
+                None => {
+                    return Err(DatasetError::ColumnNotFound(dv_column_name.to_owned()));
+                }
+            };
 
         if dv_column.column_type() != ColumnType::Numerical {
             return Err(DatasetError::ColumnTypeMismatch(

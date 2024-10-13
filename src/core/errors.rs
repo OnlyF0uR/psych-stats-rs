@@ -8,6 +8,7 @@ pub enum DatasetError {
     ColumnTypeMismatch(String, ColumnType),
     ColumnNotFound(String),
     ValueTypeMismatch(String, String, ColumnType),
+    InvalidData(String),
 }
 
 // Implement Display for custom error formatting
@@ -37,6 +38,7 @@ impl fmt::Display for DatasetError {
                     expected_type.as_str()
                 )
             }
+            DatasetError::InvalidData(ref message) => write!(f, "{}", message),
         }
     }
 }
@@ -49,6 +51,7 @@ impl Error for DatasetError {
             DatasetError::ColumnTypeMismatch(_, _) => None,
             DatasetError::ColumnNotFound(_) => None,
             DatasetError::ValueTypeMismatch(_, _, _) => None,
+            DatasetError::InvalidData(_) => None,
         }
     }
 }
